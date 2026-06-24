@@ -1,0 +1,4 @@
+mga_name,url,program_name,carrier_of_record,notes
+Example Domain,https://example.com,,,Baseline reachable public test site
+Playwright Test,https://playwright.dev,,,Documentation site useful for scanner smoke tests
+Missing URL Example,,,,Demonstrates missing_url handling
