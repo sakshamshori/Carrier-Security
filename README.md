@@ -51,7 +51,85 @@ MGA Name | https://example.com
 Another MGA | https://example.org
 ```
 
-Phase 1 intentionally does not discover websites from MGA names. If a URL is missing, the scanner records `missing_url`, adds a manual review indicator, and skips browser scanning.
+Domain discovery is now handled as a separate preparation step. The scanner still will not blindly scan a missing URL: if a domain is not confirmed, it is marked for research/confirmation and the scan step skips it.
+
+## Workflow Stages
+
+The tool is intentionally split into separate stages so domain research, website evidence capture, and technical analysis do not get mixed together.
+
+1. Domain discovery / input preparation
+   - Input: carrier name plus MGA names, or `MGA Name | https://domain.com` lines.
+   - Output: prepared CSV with `domain_status`, `domain_source`, and `domain_confidence`.
+   - Files/code: `scanner/domain_discovery.py`, `python -m scanner prepare-input`.
+
+2. Website session setup and page capture
+   - Fresh Chromium context, cache-disable attempt, clean cookie state, screenshots.
+   - Files/code: `scanner/browser_scanner.py`, `audit_environment.json`, screenshots.
+
+3. Console/cookie discovery
+   - Captures `document.cookie`, parsed cookie inventory, browser-context cookies, localStorage, and sessionStorage.
+   - Files/code: `scanner/browser_scanner.py`, `scanner/manual_detectors.py`.
+   - Output files: `pre_consent_document_cookie.json`, `pre_consent_document_cookie_inventory.json`, `pre_consent_cookies.json`, storage JSON files.
+
+4. HAR and network capture
+   - Records request URLs, domains, methods, resource types, timestamps, frame initiators, response statuses where available, raw HAR when enabled, and request-level pre/post diff.
+   - Files/code: `scanner/browser_scanner.py`.
+   - Output files: `raw_full_session.har`, `pre_consent_network.json`, `post_consent_network.json`, `pre_consent_har.json`, `post_consent_har.json`, `request_level_pre_post_diff.json`.
+
+5. Consent detection and post-consent capture
+   - Finds likely banner text/buttons, records accepted phrases checked, records clicked button text/selector, then captures post-consent behavior.
+   - Files/code: `scanner/browser_scanner.py`.
+   - Output file: `consent_detection.json`.
+
+6. Technical classification and risk flags
+   - Classifies first-party versus third-party domains, maps known vendors/platforms, detects cookie-name and URL signatures, and emits technical indicators.
+   - Files/code: `scanner/domain.py`, `scanner/vendor_classifier.py`, `scanner/manual_detectors.py`, `scanner/risk_flags.py`.
+   - Output files: `vendor_classification.json`, `pre_consent_network_signatures.json`, `pre_consent_cookie_name_matches.json`, `scan_summary.json`, `portfolio_summary.csv`.
+
+7. Reporting/export
+   - Writes structured JSON/CSV evidence files.
+   - Files/code: `scanner/reporting.py`.
+
+## Prepare Input From Names
+
+If you do not want to create a CSV by hand, create a text file like:
+
+```text
+Carrier: Clear Blue Insurance
+
+Openly
+One80
+QEO Insurance Group | https://qeo.com
+```
+
+Then run:
+
+```bash
+python -m scanner prepare-input --carrier "Clear Blue Insurance" --names names.txt --output work/clear_blue_prepared.csv
+```
+
+Rows with inline domains are marked `ready_to_scan`. Name-only rows are marked `domain_needs_research` so they are not scanned blindly.
+
+You can also provide a domain map:
+
+```csv
+mga_name,url,domain_source,domain_confidence
+Openly,https://openly.com,official website,high
+```
+
+Then run:
+
+```bash
+python -m scanner prepare-input --carrier "Clear Blue Insurance" --names names.txt --domain-map confirmed_domains.csv --output work/clear_blue_prepared.csv
+```
+
+There is also a low-confidence helper:
+
+```bash
+python -m scanner prepare-input --carrier "Clear Blue Insurance" --names names.txt --output work/prepared.csv --include-guesses
+```
+
+Guesses are for manual confirmation only and are marked `domain_needs_confirmation`.
 
 ## Run One Scan
 

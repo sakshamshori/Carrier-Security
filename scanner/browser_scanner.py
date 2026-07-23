@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import defaultdict, deque
 from copy import deepcopy
@@ -118,17 +119,25 @@ def scan_record(
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless)
-            context = browser.new_context(
-                viewport={"width": 1440, "height": 1200},
-                ignore_https_errors=True,
-                record_har_path=str(output_dir / "raw_full_session.har"),
-                record_har_content="omit",
-                user_agent=(
+            context_options = {
+                "viewport": {"width": 1440, "height": 1200},
+                "ignore_https_errors": True,
+                "user_agent": (
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/126.0.0.0 Safari/537.36"
                 ),
-            )
+            }
+            raw_har_enabled = os.getenv("SCANNER_RECORD_RAW_HAR", "1").lower() not in {"0", "false", "no"}
+            if raw_har_enabled:
+                context_options.update(
+                    {
+                        "record_har_path": str(output_dir / "raw_full_session.har"),
+                        "record_har_content": "omit",
+                        "record_har_mode": "minimal",
+                    }
+                )
+            context = browser.new_context(**context_options)
             context.clear_cookies()
             page = context.new_page()
             cache_disabled = disable_cache(page)
@@ -136,6 +145,7 @@ def scan_record(
                 "fresh_browser_context": True,
                 "cookies_cleared_before_scan": True,
                 "cache_disabled": cache_disabled,
+                "raw_har_enabled": raw_har_enabled,
                 "network_recording_attached_before_navigation": True,
                 "playwright_context": "chromium",
                 "manual_equivalent": "Incognito-style fresh session with network recording preserved by the script.",
